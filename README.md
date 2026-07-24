@@ -7,6 +7,8 @@
 
 Una aplicación web de traducción moderna, minimalista y responsiva con estética editorial. Diseñada con un área de trabajo amplia, soporte para voz, atajos de teclado y traducción automática sin necesidad de configuraciones complejas.
 
+🚀 **Ver Demo en Vivo:** [https://matiasdiaz142.github.io/translate-web](https://matiasdiaz142.github.io/translate-web)
+
 ---
 
 ## ✨ Características
@@ -40,4 +42,4 @@ No requiere instalación de dependencias, entornos de Node.js ni procesos de com
 
 1. **Clonar o descargar el repositorio:**
 ```bash
-git clone [https://github.com/matiasdiaz142/translate-web.git](https://github.com/matiasdiaz142/translate-web.git)
+git clone https://github.com/matiasdiaz142/translate-web.git
