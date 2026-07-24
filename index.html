@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traductor · Conectando palabras</title>
+
+<!-- Tailwind Play CDN: sin build, listo para ejecutar -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Habilitamos el modo oscuro por clase (lo controlamos nosotros con JS)
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          serif: ['"Source Serif 4"', 'Georgia', 'serif'],
+          sans: ['"Inter"', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+        colors: {
+          ink: {
+            950: '#0D1017',
+            900: '#10141C',
+            800: '#171D28',
+            700: '#232B39',
+            600: '#2A3240',
+          },
+          paper: {
+            50: '#F6F3EC',
+            100: '#F2EFE9',
+            200: '#E7E2D6',
+          },
+          gold: {
+            400: '#D9B84A',
+            500: '#C9A227',
+            600: '#9C7A1D',
+          },
+        },
+      },
+    },
+  }
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* Transición suave entre tema oscuro y claro en toda la app */
+  * { transition: background-color .25s ease, border-color .25s ease, color .25s ease; }
+
+  /* El sello central que intercambia idiomas: un guiño al sello postal,
+     porque cada traducción es una carta que cruza una frontera. */
+  .seal-btn {
+    border: 2px dashed var(--seal-border, #C9A227);
+    border-radius: 9999px;
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1), background-color .25s ease, border-color .25s ease;
+  }
+  .seal-btn:hover { transform: rotate(180deg) scale(1.06); }
+  .seal-btn:active { transform: rotate(180deg) scale(0.95); }
+
+  /* Barra de progreso del contador de caracteres */
+  .char-bar { transition: width .2s ease, background-color .2s ease; }
+
+  /* Scrollbar discreto dentro de las cajas de texto */
+  textarea::-webkit-scrollbar { width: 6px; }
+  textarea::-webkit-scrollbar-thumb { background-color: rgba(201,162,39,.4); border-radius: 4px; }
+
+  ::selection { background-color: rgba(201,162,39,.35); }
+
+  /* Contraste de las opciones del <select> nativo del navegador:
+     el <select> en sí hereda color por Tailwind, pero la lista desplegable
+     usa estilos propios del sistema operativo/navegador, así que se fuerzan aquí. */
+  select#langFrom, select#langTo {
+    color-scheme: light;
+  }
+  html.dark select#langFrom, html.dark select#langTo {
+    color-scheme: dark;
+  }
+  select#langFrom option, select#langTo option {
+    color: #1e293b;            /* texto oscuro de alto contraste sobre fondo claro */
+    background-color: #ffffff;
+  }
+  html.dark select#langFrom option, html.dark select#langTo option {
+    color: #F2EFE9;            /* texto claro de alto contraste sobre fondo oscuro */
+    background-color: #171D28;
+  }
+</style>
+</head>
+
+<body class="bg-paper-100 dark:bg-ink-900 min-h-screen font-sans text-ink-900 dark:text-paper-100">
+
+  <!-- ======================= ENCABEZADO ======================= -->
+  <header class="max-w-6xl mx-auto px-5 pt-8 pb-4 flex items-center justify-between">
+    <div>
+      <h1 class="font-serif text-3xl sm:text-4xl italic tracking-tight">Traductor</h1>
+      <p class="text-xs sm:text-sm font-mono uppercase tracking-[0.2em] text-gold-600 dark:text-gold-400 mt-1">
+        Conectando palabras, acortando distancias
+      </p>
+    </div>
+
+    <!-- Botón de conmutación de tema -->
+    <button id="themeToggle"
+      aria-label="Cambiar tema"
+      class="w-11 h-11 rounded-full border border-ink-600/30 dark:border-paper-200/20
+             flex items-center justify-center hover:border-gold-500 shrink-0">
+      <!-- Ícono luna (visible en modo claro, invita a pasar a oscuro) -->
+      <svg id="iconMoon" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+      </svg>
+      <!-- Ícono sol (visible en modo oscuro, invita a pasar a claro) -->
+      <svg id="iconSun" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="12" cy="12" r="4.2"/>
+        <path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ======================= CONTENIDO PRINCIPAL ======================= -->
+  <main class="max-w-6xl mx-auto px-5 pb-16">
+
+    <!-- Panel origen + destino -->
+    <div class="relative flex flex-col md:flex-row gap-3 md:gap-0 mt-6">
+
+      <!-- ---------- CAJA ORIGEN ---------- -->
+      <section class="flex-1 bg-white dark:bg-ink-800 rounded-2xl md:rounded-r-none
+                       border border-ink-600/10 dark:border-paper-200/10 p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-3">
+          <select id="langFrom"
+            class="bg-transparent font-mono text-sm uppercase tracking-wide outline-none cursor-pointer
+                   text-ink-900 dark:text-paper-100 border-b border-transparent hover:border-gold-500 pb-0.5">
+          </select>
+          <!-- Botón TTS para el texto de origen -->
+          <button id="speakFrom" aria-label="Escuchar texto original"
+            class="w-8 h-8 rounded-full flex items-center justify-center text-gold-600 dark:text-gold-400
+                   hover:bg-gold-500/10 disabled:opacity-30 disabled:hover:bg-transparent" disabled>
+            <!-- Ícono de reproducir (por defecto) -->
+            <svg id="speakFromIconPlay" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18">
+              <path d="M4 9v6h4l5 4V5L8 9H4Z"/>
+              <path d="M17 8.5a5 5 0 0 1 0 7"/>
+              <path d="M19.5 6a8.5 8.5 0 0 1 0 12"/>
+            </svg>
+            <!-- Ícono de detener (visible mientras se reproduce) -->
+            <svg id="speakFromIconStop" class="w-4.5 h-4.5 hidden" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <rect x="6" y="6" width="12" height="12" rx="1.5"/>
+            </svg>
+          </button>
+        </div>
+
+        <textarea id="textFrom" maxlength="500" rows="16" placeholder="Escribe el texto que quieres traducir…"
+          class="w-full min-h-[440px] resize-none bg-transparent outline-none placeholder:text-ink-600/40 dark:placeholder:text-paper-200/30
+                 font-serif text-lg leading-relaxed"></textarea>
+
+        <div class="flex items-center justify-between mt-2">
+          <div class="h-1 w-24 bg-ink-600/10 dark:bg-paper-200/10 rounded-full overflow-hidden">
+            <div id="charBar" class="char-bar h-full bg-gold-500" style="width:0%"></div>
+          </div>
+          <span id="charCount" class="text-xs font-mono text-ink-600/60 dark:text-paper-200/50">0 / 500</span>
+        </div>
+      </section>
+
+      <!-- ---------- SELLO DE INTERCAMBIO (SWAP) ---------- -->
+      <div class="flex md:flex-col items-center justify-center relative z-10 py-1 md:py-0 md:px-0">
+        <button id="swapBtn" aria-label="Intercambiar idiomas"
+          style="--seal-border:#C9A227;"
+          class="seal-btn w-12 h-12 flex items-center justify-center bg-paper-100 dark:bg-ink-900
+                 text-gold-600 dark:text-gold-400 md:-mx-6 shadow-sm">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M7 7h11l-3-3M17 17H6l3 3"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- ---------- CAJA DESTINO ---------- -->
+      <section class="flex-1 bg-white dark:bg-ink-800 rounded-2xl md:rounded-l-none
+                       border border-ink-600/10 dark:border-paper-200/10 p-4 sm:p-5">
+        <div class="flex items-center justify-between mb-3">
+          <select id="langTo"
+            class="bg-transparent font-mono text-sm uppercase tracking-wide outline-none cursor-pointer
+                   text-ink-900 dark:text-paper-100 border-b border-transparent hover:border-gold-500 pb-0.5">
+          </select>
+          <div class="flex items-center gap-1">
+            <!-- Botón copiar al portapapeles -->
+            <button id="copyBtn" aria-label="Copiar traducción"
+              class="w-8 h-8 rounded-full flex items-center justify-center text-gold-600 dark:text-gold-400
+                     hover:bg-gold-500/10 disabled:opacity-30 disabled:hover:bg-transparent" disabled>
+              <!-- Ícono de copiar (por defecto) -->
+              <svg id="copyIconDefault" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18">
+                <rect x="8" y="8" width="12" height="12" rx="1.5"/>
+                <path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>
+              </svg>
+              <!-- Ícono de check (feedback tras copiar) -->
+              <svg id="copyIconCheck" class="w-4.5 h-4.5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" width="18" height="18">
+                <path d="M4.5 12.5l5 5 10-11"/>
+              </svg>
+            </button>
+            <!-- Botón TTS para la traducción -->
+            <button id="speakTo" aria-label="Escuchar traducción"
+              class="w-8 h-8 rounded-full flex items-center justify-center text-gold-600 dark:text-gold-400
+                     hover:bg-gold-500/10 disabled:opacity-30 disabled:hover:bg-transparent" disabled>
+              <!-- Ícono de reproducir (por defecto) -->
+              <svg id="speakToIconPlay" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" width="18" height="18">
+                <path d="M4 9v6h4l5 4V5L8 9H4Z"/>
+                <path d="M17 8.5a5 5 0 0 1 0 7"/>
+                <path d="M19.5 6a8.5 8.5 0 0 1 0 12"/>
+              </svg>
+              <!-- Ícono de detener (visible mientras se reproduce) -->
+              <svg id="speakToIconStop" class="w-4.5 h-4.5 hidden" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <rect x="6" y="6" width="12" height="12" rx="1.5"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <textarea id="textTo" rows="16" readonly placeholder="Aquí aparecerá la traducción…"
+          class="w-full min-h-[440px] resize-none bg-transparent outline-none placeholder:text-ink-600/40 dark:placeholder:text-paper-200/30
+                 font-serif text-lg leading-relaxed"></textarea>
+
+        <div class="flex items-center justify-end mt-2 h-5">
+          <span id="statusMsg" class="text-xs font-mono text-ink-600/60 dark:text-paper-200/50"></span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- BOTONES DE ACCIÓN ---------- -->
+    <div class="flex items-center justify-center gap-3 mt-6">
+      <button id="translateBtn"
+        class="px-6 py-2.5 rounded-full bg-gold-500 hover:bg-gold-600 text-ink-950 font-medium text-sm
+               tracking-wide transition-colors disabled:opacity-40">
+        Traducir
+      </button>
+      <button id="clearBtn"
+        class="px-6 py-2.5 rounded-full border border-ink-600/20 dark:border-paper-200/20
+               hover:border-gold-500 text-sm font-medium tracking-wide">
+        Limpiar
+      </button>
+    </div>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-5 pb-8 text-center">
+    <p class="text-xs font-mono text-ink-600/40 dark:text-paper-200/30">
+      Traducción vía MyMemory Translation API · Voz vía Web Speech API del navegador
+    </p>
+  </footer>
+
+<script>
+  /* ============================================================
+     1. IDIOMAS DISPONIBLES
+     Código MyMemory (langpair) → { etiqueta visible, código BCP-47 para TTS }
+  ============================================================ */
+  const LANGUAGES = [
+    { code: 'es', label: 'Español',   speech: 'es-ES' },
+    { code: 'en', label: 'Inglés',    speech: 'en-US' },
+    { code: 'fr', label: 'Francés',   speech: 'fr-FR' },
+    { code: 'de', label: 'Alemán',    speech: 'de-DE' },
+    { code: 'it', label: 'Italiano',  speech: 'it-IT' },
+    { code: 'pt', label: 'Portugués', speech: 'pt-PT' },
+    { code: 'ja', label: 'Japonés',   speech: 'ja-JP' },
+    { code: 'ru', label: 'Ruso',      speech: 'ru-RU' },
+    { code: 'zh', label: 'Chino',     speech: 'zh-CN' },
+    { code: 'ar', label: 'Árabe',     speech: 'ar-SA' },
+  ];
+
+  const MAX_CHARS = 500;
+
+  // ---- Referencias al DOM ----
+  const $ = (id) => document.getElementById(id);
+  const langFromSel = $('langFrom');
+  const langToSel   = $('langTo');
+  const textFrom    = $('textFrom');
+  const textTo      = $('textTo');
+  const charBar     = $('charBar');
+  const charCount   = $('charCount');
+  const statusMsg   = $('statusMsg');
+  const translateBtn = $('translateBtn');
+  const clearBtn    = $('clearBtn');
+  const swapBtn     = $('swapBtn');
+  const speakFromBtn = $('speakFrom');
+  const speakToBtn   = $('speakTo');
+  const speakFromIconPlay = $('speakFromIconPlay');
+  const speakFromIconStop = $('speakFromIconStop');
+  const speakToIconPlay   = $('speakToIconPlay');
+  const speakToIconStop   = $('speakToIconStop');
+  const copyBtn       = $('copyBtn');
+  const copyIconDefault = $('copyIconDefault');
+  const copyIconCheck   = $('copyIconCheck');
+  const themeToggle  = $('themeToggle');
+  const iconSun = $('iconSun');
+  const iconMoon = $('iconMoon');
+
+  /* ============================================================
+     2. POBLAR LOS SELECTS DE IDIOMA
+  ============================================================ */
+  function fillSelect(select, defaultCode) {
+    LANGUAGES.forEach(lang => {
+      const opt = document.createElement('option');
+      opt.value = lang.code;
+      opt.textContent = `${lang.label} (${lang.code})`;
+      if (lang.code === defaultCode) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+  fillSelect(langFromSel, 'en');
+  fillSelect(langToSel, 'es');
+
+  function langInfo(code) {
+    return LANGUAGES.find(l => l.code === code);
+  }
+
+  /* ============================================================
+     3. MODO OSCURO / CLARO
+     Por defecto la app carga en modo oscuro (requisito del brief).
+  ============================================================ */
+  function applyTheme(isDark) {
+    document.documentElement.classList.toggle('dark', isDark);
+    iconSun.classList.toggle('hidden', !isDark);
+    iconMoon.classList.toggle('hidden', isDark);
+  }
+  let isDark = true; // Estado inicial: oscuro
+  applyTheme(isDark);
+
+  themeToggle.addEventListener('click', () => {
+    isDark = !isDark;
+    applyTheme(isDark);
+  });
+
+  /* ============================================================
+     4. CONTADOR DE CARACTERES (límite de 500)
+  ============================================================ */
+  function updateCharCounter() {
+    const len = textFrom.value.length;
+    charCount.textContent = `${len} / ${MAX_CHARS}`;
+    const pct = Math.min(100, (len / MAX_CHARS) * 100);
+    charBar.style.width = pct + '%';
+    charBar.classList.toggle('bg-gold-500', pct < 90);
+    charBar.classList.toggle('bg-red-500', pct >= 90);
+    speakFromBtn.disabled = len === 0;
+  }
+  textFrom.addEventListener('input', () => {
+    updateCharCounter();
+    scheduleAutoTranslate();
+  });
+
+  /* ============================================================
+     5. TRADUCCIÓN VÍA MYMEMORY API
+     Se dispara automáticamente ~500ms después de dejar de escribir
+     (debounce), y también de forma manual con el botón "Traducir".
+  ============================================================ */
+  let debounceTimer = null;
+  function scheduleAutoTranslate() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(translateText, 500);
+  }
+
+  async function translateText() {
+    clearTimeout(debounceTimer); // evita disparos duplicados si se llamó manualmente
+    stopSpeaking(); // el contenido va a cambiar, cortamos cualquier locución en curso
+    const text = textFrom.value.trim();
+    if (!text) {
+      textTo.value = '';
+      speakToBtn.disabled = true;
+      copyBtn.disabled = true;
+      statusMsg.textContent = '';
+      return;
+    }
+
+    const from = langFromSel.value;
+    const to = langToSel.value;
+
+    translateBtn.disabled = true;
+    translateBtn.textContent = 'Traduciendo…';
+    statusMsg.textContent = '';
+
+    try {
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Error de red');
+      const data = await res.json();
+
+      if (data.responseData && data.responseData.translatedText) {
+        textTo.value = data.responseData.translatedText;
+        speakToBtn.disabled = false;
+        copyBtn.disabled = false;
+        statusMsg.textContent = '';
+      } else {
+        throw new Error('Respuesta inesperada de la API');
+      }
+    } catch (err) {
+      statusMsg.textContent = 'No se pudo traducir, intenta de nuevo';
+      console.error(err);
+    } finally {
+      translateBtn.disabled = false;
+      translateBtn.textContent = 'Traducir';
+    }
+  }
+  translateBtn.addEventListener('click', translateText);
+  langFromSel.addEventListener('change', translateText);
+  langToSel.addEventListener('change', translateText);
+
+  /* ============================================================
+     6. BOTÓN DE INTERCAMBIO (SWAP)
+     Invierte los idiomas y mueve la traducción al campo de entrada,
+     dejando el texto original en el campo de destino.
+  ============================================================ */
+  function swapLanguages() {
+    clearTimeout(debounceTimer); // cancela cualquier auto-traducción pendiente
+    stopSpeaking();
+
+    // Intercambiar idiomas seleccionados
+    const tmpLang = langFromSel.value;
+    langFromSel.value = langToSel.value;
+    langToSel.value = tmpLang;
+
+    // Intercambiar contenido de los textos
+    const tmpText = textFrom.value;
+    textFrom.value = textTo.value;
+    textTo.value = tmpText;
+
+    updateCharCounter();
+    speakToBtn.disabled = textTo.value.length === 0;
+    copyBtn.disabled = textTo.value.length === 0;
+    statusMsg.textContent = '';
+  }
+  swapBtn.addEventListener('click', swapLanguages);
+
+  /* ============================================================
+     7. BOTÓN LIMPIAR
+  ============================================================ */
+  clearBtn.addEventListener('click', () => {
+    clearTimeout(debounceTimer); // cancela cualquier auto-traducción pendiente
+    stopSpeaking();
+    textFrom.value = '';
+    textTo.value = '';
+    updateCharCounter();
+    speakToBtn.disabled = true;
+    copyBtn.disabled = true;
+    statusMsg.textContent = '';
+    textFrom.focus();
+  });
+
+  /* ============================================================
+     8. TEXT-TO-SPEECH (Web Speech API nativa del navegador)
+     Cada botón alterna entre "reproducir" y "detener": si ya se
+     está hablando, un nuevo clic cancela de inmediato la locución
+     y el botón vuelve a su estado inicial.
+  ============================================================ */
+  let speakingId = null; // 'from' | 'to' | null
+
+  function setSpeakingUI(id) {
+    speakingId = id;
+    speakFromIconPlay.classList.toggle('hidden', id === 'from');
+    speakFromIconStop.classList.toggle('hidden', id !== 'from');
+    speakToIconPlay.classList.toggle('hidden', id === 'to');
+    speakToIconStop.classList.toggle('hidden', id !== 'to');
+  }
+
+  function stopSpeaking() {
+    window.speechSynthesis.cancel();
+    setSpeakingUI(null);
+  }
+
+  function toggleSpeak(id, text, langCode) {
+    // Si este mismo botón ya está reproduciendo, se detiene y listo.
+    if (speakingId === id) {
+      stopSpeaking();
+      return;
+    }
+    if (!text.trim()) return;
+    if (!('speechSynthesis' in window)) {
+      statusMsg.textContent = 'Tu navegador no soporta voz';
+      return;
+    }
+
+    window.speechSynthesis.cancel(); // corta cualquier locución previa (del otro botón, por ejemplo)
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const info = langInfo(langCode);
+    utterance.lang = info ? info.speech : 'es-ES';
+
+    // Al terminar (o si hay error), volvemos al estado inicial automáticamente
+    utterance.onend = () => setSpeakingUI(null);
+    utterance.onerror = () => setSpeakingUI(null);
+
+    setSpeakingUI(id);
+    window.speechSynthesis.speak(utterance);
+  }
+
+  speakFromBtn.addEventListener('click', () => toggleSpeak('from', textFrom.value, langFromSel.value));
+  speakToBtn.addEventListener('click', () => toggleSpeak('to', textTo.value, langToSel.value));
+
+  /* ============================================================
+     9. COPIAR TRADUCCIÓN AL PORTAPAPELES
+     Usa navigator.clipboard.writeText y muestra un check temporal.
+  ============================================================ */
+  let copyResetTimer = null;
+  copyBtn.addEventListener('click', async () => {
+    if (!textTo.value.trim()) return;
+    try {
+      await navigator.clipboard.writeText(textTo.value);
+    } catch (err) {
+      statusMsg.textContent = 'No se pudo copiar';
+      console.error(err);
+      return;
+    }
+
+    // Feedback visual: ícono de check + mensaje "¡Copiado!" por 2 segundos
+    copyIconDefault.classList.add('hidden');
+    copyIconCheck.classList.remove('hidden');
+    statusMsg.textContent = '¡Copiado!';
+
+    clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      copyIconCheck.classList.add('hidden');
+      copyIconDefault.classList.remove('hidden');
+      statusMsg.textContent = '';
+    }, 2000);
+  });
+
+  /* ============================================================
+     10. ATAJOS DE TECLADO
+     - Ctrl/Cmd + Enter  → Traducir manualmente (desde cualquier campo)
+     - Alt + S  o  Ctrl/Cmd + Shift + S → Intercambiar idiomas (swap)
+  ============================================================ */
+  document.addEventListener('keydown', (e) => {
+    const ctrlOrCmd = e.ctrlKey || e.metaKey;
+
+    // Ctrl/Cmd + Enter → traducir
+    if (ctrlOrCmd && e.key === 'Enter') {
+      e.preventDefault();
+      translateText();
+      return;
+    }
+
+    // Alt + S  ó  Ctrl/Cmd + Shift + S → swap
+    const isAltS = e.altKey && (e.key === 's' || e.key === 'S');
+    const isCtrlShiftS = ctrlOrCmd && e.shiftKey && (e.key === 's' || e.key === 'S');
+    if (isAltS || isCtrlShiftS) {
+      e.preventDefault();
+      swapLanguages();
+      return;
+    }
+  });
+
+  // Estado inicial del contador
+  updateCharCounter();
+</script>
+</body>
+</html>
